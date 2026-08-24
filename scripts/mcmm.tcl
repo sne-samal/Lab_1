@@ -1,18 +1,11 @@
 ####################################################################
 ##
-##  Modes, corners and scenarios, and the constraints read into them.
+##  Modes, corners and scenarios, and the SDC read into them.
+##  Sourced once the block exists; the caller sets PHYSICAL first.
 ##
 ##  Author:   Sne Samal
 ##  Version:  1.0
 ##  Date:     2026-08-23
-##
-##  Sourced once the block exists. The caller sets PHYSICAL to 1 or 0
-##  first, since parasitics only mean something once cells have a
-##  location.
-##
-##    mode      what the chip is doing. One here, "func".
-##    corner    process, voltage, temperature and the RC data with it.
-##    scenario  a mode analysed at a corner. Timing runs on these.
 ##
 ####################################################################
 
@@ -20,9 +13,9 @@ if { ![info exists PHYSICAL] } {
     error "Set PHYSICAL to 1 or 0 before sourcing mcmm.tcl"
 }
 
-# The tool makes a default mode, corner and scenario with no process
-# label and no parasitics. Left in place, a design can appear to pass
-# at a corner that does not exist.
+# The tool's own default mode, corner and scenario have no process
+# label and no parasitics, so a design can appear to pass at a corner
+# that does not exist.
 catch {remove_scenarios -all}
 catch {remove_corners   -all}
 catch {remove_modes     -all}
@@ -46,8 +39,8 @@ array set RC_SPEC {
 ####################################################################
 ## Mode and corners
 ####################################################################
-# The process label selects a characterisation point inside the
-# reference library. The labels were assigned when the NDM was built.
+# The process label picks a characterisation point inside the
+# reference library. The labels were set when the NDM was built.
 
 create_mode func
 current_mode func
@@ -73,23 +66,27 @@ foreach corner $CORNER_LABELS {
 ####################################################################
 ## Constraints
 ####################################################################
-# The same SDC into every scenario. They differ by corner, not by what
-# the design is being asked to do.
+# The same SDC into every scenario: they differ by corner, not by what
+# the design is asked to do.
 
 foreach corner $CORNER_LABELS {
     current_scenario func_$corner
     read_sdc $SDC_FILE
 
-    # The one constraint that names a library cell, so it comes from
-    # the kit. Without it the inputs are assumed to be driven by
-    # something infinitely strong. Not the clock, whose edge rate is
-    # set by the SDC before CTS and by the clock tree afterwards.
+    # Every input except the clock, whose edge rate the SDC sets.
     set_driving_cell -lib_cell $DRIVE_CELL \
         [get_ports * -filter "direction == in && name != $CLK_PORT"]
+
+    # On-chip variation. A corner fixes one process, voltage and
+    # temperature for the whole die; these allow paths to differ from
+    # each other within it. Without them every cell on the die is
+    # assumed identical, which no die is.
+    set_timing_derate -early $DERATE_EARLY -cell_delay -net_delay
+    set_timing_derate -late  $DERATE_LATE  -cell_delay -net_delay
 }
 
 # read_sdc reports an error and carries on, so a scenario can end up
-# with no clock at all and then report no violations.
+# with no clock and then report no violations.
 foreach corner $CORNER_LABELS {
     current_scenario func_$corner
     if { [sizeof_collection [all_clocks]] == 0 } {
@@ -101,9 +98,6 @@ foreach corner $CORNER_LABELS {
 ####################################################################
 ## What each scenario is for
 ####################################################################
-# Checking everything everywhere wastes time and buries the result
-# that matters. Setup is a slow-corner check, hold a fast-corner one.
-#
 #   wc  slow, hot, low voltage    setup, transition, capacitance
 #   bc  fast, cold, high voltage  hold
 #   tc  nominal                   power

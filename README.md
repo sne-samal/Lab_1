@@ -5,7 +5,7 @@
 
 ### Lab 1 - A Quick Start with Synopsys
 
-##### *&lt;author&gt;, v1.0 - &lt;date&gt;*
+##### *Peter Cheung, v1.2 - 3 October 2025*
 
 ---
 ### Objectives
@@ -65,10 +65,12 @@ ssh -Y <username>@ee-mill1.ee.ic.ac.uk
 
 **_Step 2: Get the lab files_**
 
-Unlike previous years, you are not asked to create the directory structure and type in the source by hand. Copy this repository to your home directory on the server and move into the Lab 1 folder:
+Ensure that you have also downloaded the tooling scripts to set up the Synopsys environment. 
+
+Clone this repository into a suitable location in your home directory on the server and move into the Lab 1 folder e.g:
 
 ```bash
-cd ~/labs_synopsys/Lab_1
+cd ~/Labs/Lab_1
 ls
 ```
 
@@ -124,7 +126,7 @@ endmodule
 
 > College has removed the ability to use Network File System (NFS) and autosynch your files. To edit a file on your laptop and copy it across, use secure copy:
 ```bash
-scp lfsr4.sv <user_name>@ee-mill1.ee.ic.ac.uk:labs_synopsys/Lab_1/src/.
+scp lfsr4.sv <user_name>@ee-mill1.ee.ic.ac.uk:Labs/Lab_1/src/.
 ```
 
 **_Step 3: Specify the PDK for your design_**
@@ -132,29 +134,29 @@ scp lfsr4.sv <user_name>@ee-mill1.ee.ic.ac.uk:labs_synopsys/Lab_1/src/.
 Before you start, you need to specify which **_process design kit (PDK)_** you will be using. From the top of the repo, enter:
 
 ```bash
-cd ~/labs_synopsys
-tools/syn
+cd ~/Labs
+vlsi-tooling/syn
 ```
 
 This lists all the PDKs available. Choose the TSMC 65nm low power process by entering:
 
 ```bash
-tools/syn tsmc65LP
+vlsi-tooling/syn tsmc65LP
 ```
 
 > The *_tools/syn_* command must be run every time before you run your **_first_** Synopsys EDA tool. It sets the environment variables the tools need, puts them on your PATH, and selects the TSMC 65nm low power process for the rest of the session.
 >
-> Two things to know about it. It gives you a **fresh tcsh shell**, so if you want to save a tool's output to a file the syntax is `|& tee file.log` and not the bash `2>&1 | tee`. And it loads **one PDK per shell**: to switch, type `exit` first.
+> Two things to know about it. It gives you a **fresh tcsh shell**. And it loads **one PDK per shell**: to switch, type `exit` first.
 
 **_Step 4: Check the libraries are in place_**
 
-Fusion Compiler does not read the foundry's Liberty and LEF files directly. It reads a **NDM** library, which has already been built for you from them. Confirm it is there:
+Fusion Compiler does not read the foundry's Liberty and LEF files directly. It reads a **NDM** library. Confirm it is there:
 
 ```bash
-fc_shell -f tools/check_ndm.tcl
+fc_shell -f vlsi-tooling/check_ndm.tcl
 ```
 
-You should see `PASS`, and `28 of 28 special cells`. If you do not, stop and ask a demonstrator; nothing later in this lab will work.
+You should see `PASS`, and `28 of 28 special cells`. If you do not, stop and ask a GTA for help; nothing later in this lab will work.
 
 Now move into the lab folder, where you will stay for the rest of the session:
 
@@ -193,7 +195,7 @@ set FLOW logical
 source scripts/setup.tcl
 ```
 
-This is bookkeeping rather than EDA, which is why you source it instead of typing it. Open `scripts/setup.tcl` and read it now. It does three things: it loads the PDK description that `tools/syn` selected, it names the design and its files, and it sets the handful of numbers you are allowed to change:
+Open `scripts/setup.tcl` and read it now. It does three things: it loads the PDK description that `vlsi-tooling/syn` selected, it names the design and its files, and it sets the handful of numbers you are allowed to change:
 
 ```tcl
 set CORE_UTIL   0.6         ;# fraction of the core available to cells
@@ -205,8 +207,6 @@ set RING_SPACING 0.5
 set RING_OFFSET  1.25
 ```
 
-Notice what is **not** in there: no path to the TSMC libraries, and no cell names. Those live in the PDK description, so these scripts would work against a different process without editing. Notice also that the clock is not there either. It lives in the constraints file, which is where a real design keeps it.
-
 **_Step 3: Create the design library_**
 
 Enter these Tcl commands in Fusion Compiler:
@@ -216,9 +216,9 @@ create_lib $SYN_LIB -technology $TECH_FILE -ref_libs $REF_LIBS
 report_ref_libs
 ```
 
-A **design library** is where the tool keeps your design. It is created against a **technology file**, which describes the metal layers, and one or more **reference libraries**, which describe the standard cells.
+A **design library** is where the tool keeps your design. It is created against a **technology file**, which describes the layers and design rules, and one or more **reference libraries**, which describe the standard cells.
 
-> Look at what `report_ref_libs` printed. There are **two** reference libraries, not one. The first holds every cell with timing information. The second holds the cells that have no timing at all: the filler cells and the tap cell, which have no logic function and no pins except power. You will meet both in Task 3.
+> Look at what `report_ref_libs` printed. There are **two** reference libraries, not one. The first holds every cell with timing information. The second holds the cells that have no timing at all: the filler cells and the tap cell, which have no logic function and no pins except power.
 
 **_Step 4: Read the design_**
 
@@ -230,13 +230,15 @@ set_non_physical_mode
 analyze -format sverilog $RTL_FILES
 elaborate $DESIGN
 set_top_module $DESIGN
+
+check_design -checks netlist
 ```
 
 `set_non_physical_mode` is what makes this logical synthesis: it tells the tool not to keep any physical data. It has to come before the design is read.
 
 `analyze` checks the HDL and stores it. `elaborate` builds the design from it, resolving parameters and inferring registers.
 
-> Read the elaboration output carefully. It names every register the tool inferred from your RTL. A register you did not expect is the earliest and cheapest sign of an RTL bug.
+> The elaboration output names every register the tool inferred from your RTL. A register you did not expect is the earliest and cheapest sign of an RTL bug.
 
 **_Step 5: Set up the constraints_**
 
@@ -249,21 +251,21 @@ source scripts/mcmm.tcl
 report_clocks
 ```
 
-Open `scripts/mcmm.tcl` and read it alongside the output. Three words matter, and they are the tool's own vocabulary:
+Open `scripts/mcmm.tcl` and read it alongside the output:
 
 * a **mode** is what the chip is doing. This design has one, called `func`.
 * a **corner** is a set of physical conditions: process, voltage and temperature.
 * a **scenario** is a mode analysed at a corner. Timing analysis runs on scenarios.
 
-Three corners are set up, and each does the job it is good for:
+Three corners are set up:
 
-| Corner | Silicon | Voltage | Temperature | Used for |
-|---|---|---|---|---|
-| `wc` | slow | 1.08 V | 125 °C | setup timing, transition and capacitance limits |
-| `bc` | fast | 1.32 V | 0 °C | hold timing |
-| `tc` | nominal | 1.20 V | 25 °C | power |
+| Corner | Silicon | Voltage | Temperature |
+|---|---|---|---|
+| `wc` | slow | 1.08 V | 125 °C |
+| `bc` | fast | 1.32 V | 0 °C | 
+| `tc` | nominal | 1.20 V | 25 °C |
 
-> Why is hold checked at the fast corner and setup at the slow one? Convince yourself before moving on. Checking both at the same corner, which is a common shortcut, checks one of them and not the other.
+> Why is hold checked at the fast corner and setup at the slow one?
 
 The timing constraints themselves are in `constraints/lfsr4.sdc`, and the same file is read into all three scenarios. Open it:
 
@@ -277,7 +279,7 @@ set_output_delay 0.2 -clock clk [get_ports data_out[*]]
 set_load 0.01 [all_outputs]
 ```
 
-A 1 ns period is a 1 GHz clock. The uncertainty stands in for jitter and, until the clock tree is built in Task 3, for the skew it will have.
+A 1 ns period is a 1 GHz clock. The uncertainty stands in for jitter and, for the skew it will have.
 
 **_Step 6: Synthesize to gates_**
 
@@ -314,9 +316,7 @@ cat outputs/logical/lfsr4_synth.v
 ```
 
 > * Examine the synthesized Verilog file and satisfy yourself that it is what you expected.
-> * What standard cells were used, and how many of each?
 > * What is the cell area, and what is the worst setup slack?
-> * The netlist and the SDC are the **only** two files Task 3 needs. Everything else is scaffolding. Why is that enough?
 
 **_Step 8: Run the whole thing as a script_**
 
@@ -334,6 +334,8 @@ fc_shell -f scripts/syn_logical.tcl
 
 Place and route turns the netlist into a physical layout: a core area for the cells to live in, a power grid to feed them, a location for every cell, a clock tree, and metal wires connecting everything.
 
+The procedure consists of many steps, and after each one the design has visibly changed. To understand what each step does, you are recommended to perform each step separately and record what you discover from both the layout window and the terminal window. This will help you appreciate what each step does, and how to debug problems when you design a more complex circuit later.
+
 **_Step 1: Create the physical design library and read the netlist_**
 
 Launch `fc_shell` again and enter:
@@ -348,9 +350,9 @@ read_verilog -top $DESIGN $SYNTH_V
 link_block
 ```
 
-> This is a **second, separate library**, and the netlist file is the only thing that crosses between them. That is not an accident of these scripts. Synthesis ran in non-physical mode, and a non-physical design cannot be turned into a physical one, so the handoff has to be a file. If you have used other tool flows, this is the same handoff a separate synthesis tool makes to a separate place-and-route tool. Task 5 shows you what happens when you do not make it.
+> This is a **second, separate library**, and the netlist file is the only thing that crosses between them. That is not an accident of these scripts. Synthesis ran in non-physical mode, and a non-physical design cannot be turned into a physical one, so the handoff has to be a file. 
 
-`link_block` resolves every cell instance in the netlist against the reference libraries. A cell that cannot be found is reported here and nowhere later.
+`link_block` resolves every cell instance in the netlist against the reference libraries. 
 
 **_Step 2: Technology fix-ups and constraints_**
 
@@ -365,9 +367,9 @@ set PHYSICAL 1
 source scripts/mcmm.tcl
 ```
 
-The first three lines tell the tool which way each metal layer prefers to run, and that a cell row may be flipped. The technology file supplied with this PDK does not say, so without them the tool warns once per layer and then guesses. Its guesses happen to be right, but a log full of warnings is a log nobody reads.
+The first three lines tell the tool which way each metal layer prefers to run, and that a cell row may be flipped. The technology file supplied with this PDK does not say.
 
-The constraints are the same file as Task 2, with one difference: `PHYSICAL 1` also loads the **TLUPlus** parasitic data, which is how the tool works out the resistance and capacitance of a wire from its length and layer. In Task 2 there were no wires to extract.
+The constraints are the same file as Task 2, with one difference: `PHYSICAL 1` also loads the **TLUPlus** parasitic data, which is how the tool works out the resistance and capacitance of a wire from its length and layer.
 
 **_Step 3: Floorplan, power plan and tap cells_**
 
@@ -377,7 +379,7 @@ Enter this Tcl command in Fusion Compiler:
 source scripts/floorplan.tcl
 ```
 
-This one is worth sourcing and then reading, because it is long and every command in it is doing something specific. Open `scripts/floorplan.tcl` and follow along.
+This is worth sourcing and then reading, because it is long and every command in it is doing something specific. Open `scripts/floorplan.tcl`.
 
 **The core.** `initialize_floorplan` creates the area the cells will sit in and fills it with rows:
 
@@ -399,16 +401,11 @@ create_net -ground $GND_NET
 connect_pg_net -automatic
 ```
 
-**The power plan.** This is built by describing a *pattern*, then a *strategy* that applies the pattern to a region, then calling `compile_pg` to turn the description into actual metal. There are two of them:
-
-* **rails** - one horizontal wire per cell row on M1, which is what the cells themselves connect to. Neighbouring rows are flipped so that they share a rail.
-* **ring** - a loop around the core carrying current in from the die edge. The horizontal segments are on M3 and the vertical ones on M2, following the preferred direction of each layer. VSS is the inner ring and VDD the outer one.
-
 **Tap cells.** `create_tap_cells` inserts cells that tie the substrate and wells to the supplies, at most 60 µm apart.
 
-> Tap cells are not optional and the 60 µm is not a preference; it is a rule from TSMC. Without them, the parasitic transistors that exist between neighbouring devices can turn on and **latch up**, shorting supply to ground until power is removed. Find out what latch-up is if you have not met it before.
+> Tap cells are not optional. Without them, the parasitic transistors that exist between neighbouring devices can turn on and **latch up**, shorting supply to ground until power is removed. 
 
-Now look at what you have built:
+Now look at what you have built by running:
 
 ```tcl
 start_gui
@@ -435,15 +432,13 @@ legalize_placement
 check_legality
 ```
 
-`place_opt` does more than placement. It places the cells, then optimises the design now that it knows where they are: resizing cells, adding buffers on long nets, and moving cells that turned out to be badly placed. This is the single biggest difference from the days when synthesis and layout were separate tools that did not talk to each other.
+`place_opt` does more than placement. It places the cells, then optimises the design now that it knows where they are: resizing cells, adding buffers on long nets, and moving cells that turned out to be badly placed. 
 
-Logic that needs a constant 1 or 0 cannot simply connect to the power rails, because the gate oxide of the transistor it drives would then see the supply directly. `add_tie_cells` provides the constant through a transistor instead.
-
-> `connect_pg_net` is called again, deliberately. It ran during the floorplan, before the tie cells existed, and it does not run itself again. The rule this is an instance of: **anything that inserts cells has to reconnect power afterwards.** You will see it a third time in Step 7.
+Logic that needs a constant 1 or 0 is provided with `add_tie_cells`.
 
 If `place_opt` fails with `PLACE-006 over utilization`, the core is too small for the design. The message gives you both numbers. Lower `CORE_UTIL` in `scripts/setup.tcl`, which makes the core bigger.
 
-Look at the result in the GUI and compare it with the empty core you saw in Step 3.
+> Look at the result in the GUI and compare it with the empty core you saw in Step 3.
 
 **_Step 5: Clock tree synthesis_**
 
@@ -465,7 +460,7 @@ set_max_transition 0.13 -clock_path [get_clocks $CLK_PORT]
 clock_opt
 ```
 
-The first block restricts the clock tree to the library's clock buffers and inverters. These are designed for the job: balanced rise and fall times, and drive strengths in even steps so the tree can be built in regular stages. Ordinary buffers would work electrically and give a worse tree.
+The first block restricts the clock tree to the library's clock buffers and inverters. 
 
 `clock_opt` builds the tree, routes it, and then re-optimises the data paths against the real clock arrival times.
 
@@ -474,13 +469,14 @@ report_clock_qor
 report_clock_timing -type skew
 ```
 
-> Two numbers to look at, and understand:
-> * **skew** is the spread in arrival times between flip-flops. Skew eats directly into your setup margin.
-> * **transition** is how sharp the clock edges are. A slow edge wastes power and makes the arrival time ill-defined.
->
-> Note that the clock is held to a 0.13 ns transition while the data is allowed 0.2 ns. Why must a clock edge be sharper than the data it launches?
+Now look at what has appeared:
 
-> Hold violations usually appear for the first time at this stage. Why could there not have been any before the clock tree existed?
+```tcl
+start_gui
+```
+
+The clock tree is new metal and new cells that were not in your netlist. Find the clock buffers, and trace the path from the `clk` port to a flip-flop.
+
 
 **_Step 6: Routing_**
 
@@ -492,9 +488,15 @@ route_opt
 check_routes
 ```
 
-`route_auto` connects every net with real metal on nine layers, obeying TSMC's spacing and width rules. It does it in three passes: global routing decides roughly which channels each net takes, track assignment picks the specific track, and detail routing draws the wires and fixes the rule violations that result.
+`route_auto` connects every net with real metal on nine layers, obeying TSMC's spacing and width rules. 
 
-`route_opt` then re-optimises the timing. Until now, wire delay was an estimate. Now it is a fact.
+`route_opt` then re-optimises the timing.
+
+Look at it:
+
+```tcl
+start_gui
+```
 
 **_Step 7: Finishing up and checking_**
 
@@ -507,8 +509,6 @@ create_stdcell_fillers -lib_cells [get_lib_cells $fillers]
 
 connect_pg_net -automatic
 ```
-
-The gaps between placed cells are not empty space in silicon. The well and implant layers have to run continuously across a row, and a gap breaks them. Filler cells are dummies that carry those layers through and continue the power rails. They are inserted largest first, so a run of 64 sites becomes one FILL64 rather than sixty-four FILL1s.
 
 Now run the checks:
 
@@ -525,9 +525,8 @@ check_lvs -max_errors 0
 > Total number of open nets = 0
 > Total number of DRCs = 0
 > ```
-> One `end-of-line keepout zone violation on M1` from `check_pg_drc` is known and accepted; it is a rule about the inside of a TSMC cell, not a fault in our power plan.
+> One `end-of-line keepout zone violation on M1` from `check_pg_drc` is known.
 
-> These five checks are **not signoff**. They are the tool marking its own homework: `check_lvs` here compares the layout against its own connectivity, not against an independent netlist. Real DRC and LVS run in a separate tool against the foundry's own rule decks, and that is Lab 2.
 
 Finally, export everything:
 
@@ -543,9 +542,7 @@ save_block -label finish
 save_lib
 ```
 
-> The exported netlist deliberately leaves out the filler and tap cells, and the power connections. The filler and tap cells have no Verilog model at all, because there is nothing to model: no logic, no timing, no pins except power. The vendor's cell models declare no power ports either. Left in, the simulator in Task 4 refuses to elaborate the design.
->
-> Nothing is lost. The design library and the DEF still contain every filler, every tap and every power connection, and those are what a chip is manufactured from. The netlist is a view of the design built for one particular reader.
+> The exported netlist deliberately leaves out the filler and tap cells, and the power connections. The filler and tap cells have no Verilog model at all, because there is nothing to model. Left in, the simulator in Task 4 refuses to elaborate the design.
 
 **_Step 8: Run the whole thing as a script_**
 
@@ -555,8 +552,6 @@ Exit from Fusion Compiler and launch it again, so that you flush out all interna
 fc_shell -f scripts/pnr.tcl
 ```
 
-Read `scripts/pnr.tcl` and see how little there is to it: it is the commands you just typed, plus two `source` lines for the floorplan and for everything from clock tree synthesis onwards.
-
 When it finishes you are left at the `fc_shell>` prompt with the finished design open. Look at it:
 
 ```tcl
@@ -565,11 +560,9 @@ start_gui
 
 <p align="center"> <img src="diagrams/lfsr4_layout.png" width="600" height="600"> </p><BR>
 
-> * Compare the circuit produced after synthesis in Task 2 with the one you have now. Comment on how place and route has modified the original circuit.
+> * Compare the circuit produced after synthesis in Task 2 with the one you have now. Comment on how place and route has modified the original circuit. Look for buffers that were not in the synthesised netlist, cells that changed drive strength, and cells that were never in your design at all.
 > * Examine what has appeared in the `outputs/logical` and `reports/logical` folders.
-> * Find a tap cell and a filler cell in the layout. How would you tell them apart?
 
-`syn_logical.tcl` and `pnr.tcl` will now serve as templates for your future designs.
 
 **_Step 9: Changing the aspect ratio of the core_**
 
@@ -587,9 +580,7 @@ fc_shell -f scripts/pnr.tcl
 
 > * Discuss with your lab partner how the layout differs from the one you had after Step 8.
 > * What has happened to the timing, and why?
-> * What could you do to minimise the area taken by this circuit?
->
-> You may notice that with `ASPECT` set to 1.0 the core is not exactly square. Look at the height of a single cell row and work out why it cannot be.
+> * What could you do to minimise the size taken by this circuit?
 
 Set `ASPECT` back to 1.0 before you move on.
 
@@ -599,13 +590,13 @@ Set `ASPECT` back to 1.0 before you move on.
 
 The placed and routed circuit will now be simulated to make sure that the layout version of the circuit works as expected, using Synopsys' VCS simulator.
 
-You will simulate the same design at **three** points in the flow. Running all three is the quickest way to see what synthesis and layout actually did.
+You can simulate the same design at **three** points in the flow. Running all three is the quickest way to see what synthesis and layout actually did.
 
 | Simulation | What it is | Delays |
 |---|---|---|
 | `rtl` | the SystemVerilog you started with | none |
-| `synth` | the gate-level netlist from Task 2 | none |
-| `layout` | the routed netlist from Task 3 | every gate and wire, back-annotated |
+| `synth` | the gate-level netlist from Task 2 | cell delays only, from the library models |
+| `layout` | the routed netlist from Task 3 | every gate and wire, back-annotated from the SDF |
 
 **_Step 1: The testbench_**
 
@@ -622,13 +613,11 @@ Those two lines are what produce the waveform file. `$dumpfile` names it and `$d
 
 **_Step 2: Simulate the RTL_**
 
-The simulator is driven from a Makefile rather than by hand, because the command lines are long. Enter:
+The simulator is driven from a Makefile. Enter:
 
 ```bash
 make sim-rtl
 ```
-
-This is the design as you wrote it: no cells, no delays, no layout. It is what the circuit is *supposed* to do, and it is your reference for the other two.
 
 **_Step 3: Simulate the synthesised netlist_**
 
@@ -636,7 +625,9 @@ This is the design as you wrote it: no cells, no delays, no layout. It is what t
 make sim-synth
 ```
 
-This is the netlist from Task 2, using real TSMC cells but with zero wire delay. If this matches the RTL, synthesis preserved the behaviour of your design.
+This is the netlist from Task 2, built from real TSMC cells. The cells are not instantaneous: TSMC's Verilog models carry `specify` blocks describing how long each cell takes, and the simulator uses them. What is missing is the wires, which have no length yet because nothing has been placed, and so no delay.
+
+> Those cell delays are the defaults built into the models. They are not tied to any particular corner until an SDF is annotated onto them, which is what Step 4 does. So treat this simulation as proof that synthesis preserved the behaviour of your design, not as a measurement of how fast it will run.
 
 **_Step 4: Simulate the layout_**
 
@@ -644,7 +635,7 @@ This is the netlist from Task 2, using real TSMC cells but with zero wire delay.
 make sim-layout
 ```
 
-This is the routed design from Task 3, with the delay of every gate and every wire read from the SDF file and annotated onto the netlist. This is the circuit running at silicon speed.
+This is the routed design from Task 3, with the delay of every gate and every wire read from the SDF file and annotated onto the netlist. 
 
 > The SDF is written at one corner, and which one you choose changes what you see. `tc` is nominal behaviour; `wc` is the slowest silicon TSMC will ship. To try it:
 > ```bash
@@ -660,18 +651,16 @@ make waves KIND=layout_logical
 
 A GTKWave window will appear. Clicking on the module and signal names on the left will insert waveforms in the waveform pane. You should see the signal waveforms of the simple "chip" you have created, as shown below.
 
-> Use `<CTRL-0>`, `<CTRL-+>` and `<CTRL-->` keys to fit the whole waveform, zoom in and zoom out respectively.
-
 <p align="center"> <img src="diagrams/lfsr4_waveforms.jpg" width="1000" height="250"> </p><BR>
 
 `KIND` selects which of the three simulations to look at: `rtl`, `synth` or `layout_logical`.
 
-> * Check that the output of the LFSR is as you expected. The sequence should be the one you know from the 2nd year lab.
-> * Now compare `rtl` against `layout_logical` on the same time axis. The RTL switches its outputs the instant the clock edge arrives; the layout does not. Measure the delay and explain where it comes from.
+> * Check that the output of the LFSR is as you expected. 
+
 
 **_Optional: Verdi_**
 
-Verdi is the Synopsys waveform viewer, and it does something GTKWave cannot: it shows the design as well as the waveforms, so you can click a signal and jump to the source or the schematic that drives it.
+Verdi is the Synopsys waveform viewer:
 
 ```bash
 make waves-verdi KIND=layout_logical
@@ -693,15 +682,7 @@ Open `scripts/fusion.tcl` and compare it with `scripts/syn_logical.tcl` and `scr
 | handoff | a netlist file, then a second library | none, one library throughout |
 | placement | `place_opt`, from scratch | carried through from synthesis |
 
-`compile_fusion` runs seven stages in order: `initial_map`, `logic_opto`, `initial_place`, `initial_drc`, `initial_opto`, `final_place`, `final_opto`. In `scripts/fusion.tcl` it is split in two around the floorplan:
-
-```tcl
-compile_fusion -to logic_opto
-source scripts/floorplan.tcl
-compile_fusion -from initial_place -to final_opto
-```
-
-> Why the split? `initialize_floorplan` sizes the core from a target utilization, and a utilization is meaningless until there are real cells to measure. Floorplan an unmapped design and the tool tells you so, gives you a core of almost no size, and placement then fails. Stopping at `logic_opto` produces a mapped netlist first, so the floorplan comes out the same as the one Task 3 built, and the two flows stay comparable.
+`compile_fusion` runs seven stages in order: `initial_map`, `logic_opto`, `initial_place`, `initial_drc`, `initial_opto`, `final_place`, `final_opto`. 
 
 **_Step 2: Run it_**
 
@@ -744,10 +725,25 @@ Everything in this lab prints to your terminal and nothing is saved unless you a
 fc_shell -f scripts/pnr.tcl |& tee pnr.log
 ```
 
-Remember that `tools/syn` gives you a tcsh, so it is `|&` and not the bash `2>&1 |`.
+Get into the habit of doing that on every run, not just the ones that go wrong. Fusion Compiler prints a summary of every warning and error it produced after each major command, deduplicated and counted, which looks like this:
 
-Three things to reach for, in order:
+```
+Information: >>>>>>> 11 unique error and warning message tags while observing compile_fusion / initial_opto:
+Information: #prnt #trgr #lmt    Tag  Level     Format (or last printed message)
+Information:     8     8  0 OPT-070   WARNING   Warning: Cannot find any default max transition ...
+Information:    44    16  0 OPT-902   WARNING   Warning: No clock routing rules were specified ...
+Information: >>>>>>> Summary: 105 error&warning MSGs observed during compile_fusion / initial_opto
+```
 
+That summary is the single most useful thing in the log and it scrolls past in seconds. With a log file you can find it again:
+
+```bash
+grep -A20 "unique error and warning" pnr.log
+```
+
+Four things to reach for, in order:
+
+* **The message summary above.** It tells you which warnings actually fired and how often, so you can judge which are worth chasing.
 * **The reports.** `reports/<flow>/` holds one set of files per stage, so the effect of any stage is a `diff` against the stage before it. If timing collapsed somewhere, this tells you where.
 * **The message ID.** Every warning and error from a Synopsys tool ends with a code in brackets, such as `PLACE-006` or `ZRT-064`. Inside `fc_shell`, `man PLACE-006` explains what it means. This is far more useful than searching for the text of the message.
 * **The GUI.** If a check reported violations, open the design and look at them:
@@ -797,3 +793,4 @@ The text form of the physical design: the die and core outline, the rows, and th
 
 **SPEF (Standard Parasitic Exchange Format)**
 The extracted resistance and capacitance of every net, produced after routing. It is what a signoff timing tool reads to compute delays independently of the tool that built the layout.
+

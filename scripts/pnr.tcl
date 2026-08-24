@@ -1,16 +1,13 @@
 ####################################################################
 ##
-##  Place and route a synthesised netlist through to a finished layout.
+##  Place and route a synthesised netlist through to a finished
+##  layout. Reads the netlist from syn_logical.tcl.
 ##
 ##  Author:   Sne Samal
 ##  Version:  1.0
 ##  Date:     2026-08-23
 ##
 ##      fc_shell -f scripts/pnr.tcl
-##
-##  Part 2 of the two-step flow. Reads the netlist from
-##  scripts/syn_logical.tcl into a fresh physical library, floorplans
-##  it, places it, then hands over to the shared back end.
 ##
 ####################################################################
 
@@ -30,16 +27,14 @@ if { [file exists $PNR_LIB] } { file delete -force $PNR_LIB }
 create_lib $PNR_LIB -technology $TECH_FILE -ref_libs $REF_LIBS
 
 # link_block resolves every instance against the reference libraries.
-# A cell that cannot be found is reported here.
 read_verilog -top $DESIGN $SYNTH_V
 link_block
 
 ####################################################################
 ## Technology fix-ups
 ####################################################################
-# The tech file gives every layer an "unknown" preferred direction and
-# the site no symmetry, so the tool warns per layer and then guesses.
-# Its guesses are right; setting them keeps the log readable.
+# The tech file leaves layer directions and site symmetry unset, so
+# the tool warns per layer and then guesses.
 
 suppress_message ATTR-12
 set_attribute [get_layers $HORIZONTAL_LAYERS] routing_direction horizontal
@@ -55,37 +50,27 @@ source scripts/floorplan.tcl
 ####################################################################
 ## Placement
 ####################################################################
-# place_opt places, then optimises now that it knows where things are:
-# resizing cells, buffering long nets and moving cells that turned out
-# to be badly placed.
-#
-# PLACE-006 over utilization means the core is too small for the
-# design. The message gives both numbers; lower CORE_UTIL to make the
-# core bigger.
+# place_opt places, then optimises now that it knows where things are.
+# PLACE-006 over utilization means the core is too small: lower
+# CORE_UTIL.
 
 lab_banner "Placement"
 
 redirect -tee -file $RPT_DIR/place_pre_check.rpt \
-    {check_design -checks pre_placement_stage}
+    "check_design -checks pre_placement_stage -log_file $RPT_DIR/place_check.log"
 
 place_opt
 
-# Logic needing a constant 1 or 0 cannot connect straight to the rail:
-# the gate oxide it drives would see the supply directly. A tie cell
-# provides the constant through a transistor instead.
+# Constants need a tie cell rather than a direct connection to a rail.
 add_tie_cells \
     -tie_high_lib_cells [get_lib_cells */$TIE_HI_CELL] \
     -tie_low_lib_cells  [get_lib_cells */$TIE_LO_CELL]
 
 connect_pg_net -automatic
 
-# Placement can leave cells overlapping while it optimises.
 legalize_placement
 
-redirect -tee -file $RPT_DIR/place_legality.rpt {check_legality}
-
-# Reported, not gated. Every cell now has a location, so unlike at
-# floorplan these two mean something. They are gated at finish.
+redirect -tee -file $RPT_DIR/place_legality.rpt        {check_legality}
 redirect -tee -file $RPT_DIR/place_pg_drc.rpt          {check_pg_drc}
 redirect -tee -file $RPT_DIR/place_pg_connectivity.rpt {check_pg_connectivity}
 
