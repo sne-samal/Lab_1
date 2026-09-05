@@ -4,12 +4,10 @@
 ##  Sourced by pnr.tcl and fusion.tcl once the design is mapped.
 ##
 ##  Author:   Sne Samal
-##  Version:  1.0
-##  Date:     2026-08-23
+##  Version:  1.1
+##  Date:     2026-09-05
 ##
 ####################################################################
-
-lab_banner "Floorplan"
 
 # -side_ratio takes proportions: {1 $ASPECT} gives a core whose height
 # is ASPECT times its width.
@@ -21,17 +19,9 @@ initialize_floorplan \
 
 report_utilization
 
-puts ""
-puts "  utilization : $CORE_UTIL"
-puts "  aspect      : $ASPECT"
-puts "  core offset : $CORE_OFFSET um"
-puts "  boundary    : [get_attribute [current_block] boundary]"
-
 ####################################################################
 ## Power and ground nets
 ####################################################################
-# The netlist says nothing about power, so the supply nets and every
-# cell's connection to them are made here.
 
 if { [sizeof_collection [get_nets -quiet $PWR_NET]] == 0 } {
     create_net -power $PWR_NET
@@ -45,10 +35,6 @@ connect_pg_net -automatic
 ####################################################################
 ## Power plan
 ####################################################################
-# Rails: one wire per cell row on M1. Ring: a loop around the core,
-# each segment on a layer running its preferred direction.
-
-lab_banner "Power plan"
 
 # Both options default to false. Without them the rail reports
 # end-of-line spacing violations against pins inside the cells it
@@ -95,19 +81,13 @@ compile_pg -strategies rail_strategy -via_rule pg_via_rule
 connect_pg_net
 
 ####################################################################
-## Tap cells
+## Tap cells and pins
 ####################################################################
-
-lab_banner "Tap cells"
 
 create_tap_cells \
     -lib_cell [get_lib_cells */$TAP_CELL] \
     -distance $TAP_DISTANCE \
     -pattern  stagger
-
-####################################################################
-## Pins
-####################################################################
 
 # -self places this block's own pins, not those of any child block.
 place_pins -self

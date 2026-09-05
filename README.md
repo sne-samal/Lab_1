@@ -5,7 +5,7 @@
 
 ### Lab 1 - A Quick Start with Synopsys
 
-##### *Peter Cheung, v1.2 - 3 October 2025*
+##### *Peter Cheung, v1.3 - 5 September 2026*
 
 ---
 ### Objectives
@@ -22,6 +22,19 @@ By the end of this laboratory session, you should be able to do the following.
 * Use **_GTKWave_** to inspect simulation results.
 * Understand what **physical synthesis** is, and measure what it buys you.
 * Inspect the resulting **silicon layout** of the circuit.
+
+---
+### Contents
+---
+* [Before you start](#before-you-start)
+* [Task 1 - Connect to the Teaching Server and Load the Tools](#task-1---connect-to-the-teaching-server-and-load-the-tools)
+* [Task 2 - Synthesize RTL to Standard Cells](#task-2---synthesize-rtl-to-standard-cells)
+* [Task 3 - Place and Route the Standard Cells](#task-3---place-and-route-the-standard-cells)
+* [Task 4 - Simulation](#task-4---simulation)
+* [Task 5 - Physical Synthesis](#task-5---physical-synthesis)
+* [When something goes wrong](#when-something-goes-wrong)
+* [Test yourself challenge](#test-yourself-challenge)
+* [File formats used in this Lab](#file-formats-used-in-this-lab)
 
 ---
 ### Before you start
@@ -65,9 +78,16 @@ ssh -Y <username>@ee-mill1.ee.ic.ac.uk
 
 **_Step 2: Get the lab files_**
 
-Ensure that you have also downloaded the tooling scripts to set up the Synopsys environment. 
+This lab assumes you have set up the tools from [Lab 0](https://github.com/sne-samal/vlsi-tooling). If you have not worked through [Lab 0](https://github.com/sne-samal/vlsi-tooling) yet, do it now. Nothing below this point runs without it. Then clone this repo into `~/Labs`
 
-Clone this repository into a suitable location in your home directory on the server and move into the Lab 1 folder e.g:
+<!-- TODO: update both clone URLs if either repository moves. -->
+
+```bash
+cd ~/Labs
+git clone git@github.com:sne-samal/Lab_1.git
+```
+
+Move into the lab folder and look at what is there:
 
 ```bash
 cd ~/Labs/Lab_1
@@ -124,11 +144,6 @@ endmodule
 ```
 <p align="center"> <img src="diagrams/lfsr4.jpg" width="600" height="230"> </p><BR>
 
-> College has removed the ability to use Network File System (NFS) and autosynch your files. To edit a file on your laptop and copy it across, use secure copy:
-```bash
-scp lfsr4.sv <user_name>@ee-mill1.ee.ic.ac.uk:Labs/Lab_1/src/.
-```
-
 **_Step 3: Specify the PDK for your design_**
 
 Before you start, you need to specify which **_process design kit (PDK)_** you will be using. From the top of the repo, enter:
@@ -144,25 +159,8 @@ This lists all the PDKs available. Choose the TSMC 65nm low power process by ent
 vlsi-tooling/syn tsmc65LP
 ```
 
-> The *_tools/syn_* command must be run every time before you run your **_first_** Synopsys EDA tool. It sets the environment variables the tools need, puts them on your PATH, and selects the TSMC 65nm low power process for the rest of the session.
->
-> Two things to know about it. It gives you a **fresh tcsh shell**. And it loads **one PDK per shell**: to switch, type `exit` first.
+> The *_vlsi-tooling/syn_* command must be run every time before you run your **_first_** Synopsys EDA tool. It sets the environment variables the tools need, puts them on your PATH, and selects the TSMC 65nm low power process for the rest of the session.
 
-**_Step 4: Check the libraries are in place_**
-
-Fusion Compiler does not read the foundry's Liberty and LEF files directly. It reads a **NDM** library. Confirm it is there:
-
-```bash
-fc_shell -f vlsi-tooling/check_ndm.tcl
-```
-
-You should see `PASS`, and `28 of 28 special cells`. If you do not, stop and ask a GTA for help; nothing later in this lab will work.
-
-Now move into the lab folder, where you will stay for the rest of the session:
-
-```bash
-cd Lab_1
-```
 
 ---
 ### Task 2 - Synthesize RTL to Standard Cells
@@ -198,13 +196,15 @@ source scripts/setup.tcl
 Open `scripts/setup.tcl` and read it now. It does three things: it loads the PDK description that `vlsi-tooling/syn` selected, it names the design and its files, and it sets the handful of numbers you are allowed to change:
 
 ```tcl
-set CORE_UTIL   0.6         ;# fraction of the core available to cells
-set ASPECT      1.0         ;# core height / width
-set CORE_OFFSET 5           ;# core to die edge, um
+set CORE_UTIL   0.6         ;# fraction of the core area filled by cells
+set ASPECT      1.0         ;# core height / core width
+set CORE_OFFSET 5           ;# core edge to die edge (microns)
 
-set RING_WIDTH   1.0        ;# power ring, um
-set RING_SPACING 0.5
-set RING_OFFSET  1.25
+set RING_WIDTH   1.0        ;# width of one power ring conductor (microns)
+set RING_SPACING 0.5        ;# gap between the VDD and VSS rings (microns)
+
+# Centres the pair of rings in the core-to-die channel.
+set RING_OFFSET [expr {($CORE_OFFSET - (2 * $RING_WIDTH + $RING_SPACING)) / 2.0}]
 ```
 
 **_Step 3: Create the design library_**
@@ -240,6 +240,21 @@ check_design -checks netlist
 
 > The elaboration output names every register the tool inferred from your RTL. A register you did not expect is the earliest and cheapest sign of an RTL bug.
 
+For this design it reports:
+
+```
+==================================================================================
+|    Register Name    |   Type    | Width | Bus | MB |  Set  | Reset | ST | Line |
+==================================================================================
+|      sreg_reg       | Flip-flop |   2   |  Y  | Y  | Async | Async | N  |  14  |
+==================================================================================
+Presto compilation completed successfully. (lfsr4)
+Module: lfsr4, Ports: 6, Input: 2, Output: 4, Inout: 0
+Module: lfsr4, Registers: 4, Async set/reset: 4, Sync set/reset: 0
+```
+
+> The tool has decided these are **asynchronous** reset flip-flops, why?. What would you write instead to get a synchronous reset?
+
 **_Step 5: Set up the constraints_**
 
 Enter these Tcl commands in Fusion Compiler:
@@ -257,13 +272,21 @@ Open `scripts/mcmm.tcl` and read it alongside the output:
 * a **corner** is a set of physical conditions: process, voltage and temperature.
 * a **scenario** is a mode analysed at a corner. Timing analysis runs on scenarios.
 
-Three corners are set up:
+Three corners are set up. The names are abbreviations: **wc** is *worst case*, **tc** is *typical case* and **bc** is *best case*.
 
-| Corner | Silicon | Voltage | Temperature |
-|---|---|---|---|
-| `wc` | slow | 1.08 V | 125 °C |
-| `bc` | fast | 1.32 V | 0 °C | 
-| `tc` | nominal | 1.20 V | 25 °C |
+| Corner | Meaning | Silicon | Voltage | Temperature |
+|---|---|---|---|---|
+| `wc` | worst case | slow | 1.08 V | 125 °C |
+| `tc` | typical case | nominal | 1.20 V | 25 °C |
+| `bc` | best case | fast | 1.32 V | 0 °C |
+
+A scenario is named `<mode>_<corner>`, so this design has `func_wc`, `func_tc` and `func_bc`. Each one is given a different job in `scripts/mcmm.tcl`:
+
+| Scenario | What it is responsible for |
+|---|---|
+| `func_wc` | setup, max transition, max capacitance, leakage power |
+| `func_bc` | hold |
+| `func_tc` | dynamic and leakage power |
 
 > Why is hold checked at the fast corner and setup at the slow one?
 
@@ -279,7 +302,10 @@ set_output_delay 0.2 -clock clk [get_ports data_out[*]]
 set_load 0.01 [all_outputs]
 ```
 
-A 1 ns period is a 1 GHz clock. The uncertainty stands in for jitter and, for the skew it will have.
+A 1 ns period is a 1 GHz clock, and the uncertainty stands in for jitter and for the skew the clock will have once it is distributed.
+
+* `set_clock_transition` fixes the clock edge rate to assume while the clock is still **ideal**. 
+* `set_max_transition` is a **design rule limit**: the slowest edge any net in the design is allowed. It applies to every net, not just the clock, and it is what makes the tool buffer long nets and upsize weak drivers.
 
 **_Step 6: Synthesize to gates_**
 
@@ -297,6 +323,7 @@ Enter these Tcl commands in Fusion Compiler:
 
 ```tcl
 report_area
+report_cells
 report_qor
 report_timing -delay_type max -max_paths 10
 report_power -scenarios func_tc
@@ -307,6 +334,8 @@ write_sdc -output $SYNTH_SDC
 save_block
 save_lib
 ```
+
+`report_cells` answers the question the area and timing reports do not: **which standard cells did the tool actually choose, and how many of each?** It gives the reference name, library and area of every cell in your design. Keep this report, because you will compare it against the same one after place and route in Task 3.
 
 Now leave the tool with `exit` and look at what you produced:
 
@@ -403,7 +432,7 @@ connect_pg_net -automatic
 
 **Tap cells.** `create_tap_cells` inserts cells that tie the substrate and wells to the supplies, at most 60 µm apart.
 
-> Tap cells are not optional. Without them, the parasitic transistors that exist between neighbouring devices can turn on and **latch up**, shorting supply to ground until power is removed. 
+> Why are tap cells needed? 
 
 Now look at what you have built by running:
 
@@ -412,6 +441,8 @@ start_gui
 ```
 
 You should see an empty core with a power ring around it and rows of empty sites. Nothing is placed yet, and that is the point: a power plan is far easier to understand before there are cells on top of it. Zoom into a corner and find the vias where the M1 rails meet the M2 and M3 ring.
+
+> Getting around the layout window: **zoom** with the scroll wheel, and to **pan**, press **shift+P** to pick up the pan tool and then drag with the left mouse button held down.
 
 **_Step 4: Placement_**
 
@@ -469,14 +500,11 @@ report_clock_qor
 report_clock_timing -type skew
 ```
 
-Now look at what has appeared:
+Now look at the design:
 
 ```tcl
 start_gui
 ```
-
-The clock tree is new metal and new cells that were not in your netlist. Find the clock buffers, and trace the path from the `clk` port to a flip-flop.
-
 
 **_Step 6: Routing_**
 
@@ -525,7 +553,7 @@ check_lvs -max_errors 0
 > Total number of open nets = 0
 > Total number of DRCs = 0
 > ```
-> One `end-of-line keepout zone violation on M1` from `check_pg_drc` is known.
+> Two `end-of-line keepout zone violations on M1` from `check_pg_drc` is known.
 
 
 Finally, export everything:
@@ -559,6 +587,12 @@ start_gui
 ```
 
 <p align="center"> <img src="diagrams/lfsr4_layout.png" width="600" height="600"> </p><BR>
+
+Every stage wrote its own cell report, so the comparison you were promised in Task 2 is a `diff`:
+
+```bash
+diff reports/logical/synth_cells.rpt reports/logical/finish_cells.rpt
+```
 
 > * Compare the circuit produced after synthesis in Task 2 with the one you have now. Comment on how place and route has modified the original circuit. Look for buffers that were not in the synthesised netlist, cells that changed drive strength, and cells that were never in your design at all.
 > * Examine what has appeared in the `outputs/logical` and `reports/logical` folders.
@@ -625,7 +659,7 @@ make sim-rtl
 make sim-synth
 ```
 
-This is the netlist from Task 2, built from real TSMC cells. The cells are not instantaneous: TSMC's Verilog models carry `specify` blocks describing how long each cell takes, and the simulator uses them. What is missing is the wires, which have no length yet because nothing has been placed, and so no delay.
+This is the netlist from Task 2, built from real TSMC cells. 
 
 > Those cell delays are the defaults built into the models. They are not tied to any particular corner until an SDF is annotated onto them, which is what Step 4 does. So treat this simulation as proof that synthesis preserved the behaviour of your design, not as a measurement of how fast it will run.
 
@@ -767,7 +801,7 @@ A 16-bit signature analyzer circuit is shown below. You can easily modify the **
 
 <p align="center"> <img src="diagrams/16-bit_signature_analyzer.jpg" width="640" height="250"> </p> <BR>
 
-> To build it, put your Verilog in `src/`, change `set DESIGN` in `scripts/setup.tcl`, and write an SDC for it in `constraints/`. Nothing else in the flow needs to change. If that turns out to be true, the scripts were written properly.
+> To build it, put your Verilog in `src/`, change `set DESIGN` in `scripts/setup.tcl`, and write an SDC for it in `constraints/`.
 
 ---
 ### File formats used in this Lab
@@ -777,13 +811,13 @@ A 16-bit signature analyzer circuit is shown below. You can easily modify the **
 The Synopsys standard cell library format. A single database holding everything about a cell that any stage of the flow needs: timing, power, and the physical abstract used for placement and routing. Other tool flows keep these in separate Liberty, LEF and capacitance table files, and one job of setting up a PDK for Fusion Compiler is building the NDM from them.
 
 **LEF (Library Exchange Format)**
-A readable text file that provides an abstract, physical description of a standard cell or predesigned IP block. It contains the information a place-and-route tool needs, such as cell dimensions, pin locations, metal layers and via definitions, without disclosing the transistor-level layout inside. You wrote one out for `lfsr4` in Task 3, which is what would let somebody else use your circuit as a block inside a larger chip.
+A readable text file that provides an abstract, physical description of standard cell or predesigned IP block. It contains essential information for PnR tools, such as cell dimensions, pin locations, metal layers, and via definitions allowing PnR tools to perform appropriate optimizations.
 
 **SDC (Synopsys Design Constraints)**
-A readable text file that specifies timing, power and area constraints for a digital circuit design. It uses Tcl statements to specify parameters such as clock definitions, input and output delays and transition limits. This information is used by EDA tools during synthesis, placement and timing analysis to ensure the design meets its performance requirements.
+A readable text file that specifies timing, power, and area constraints for a digital circuit design. It uses Tcl statements to specify parameters such as clock definitions, input/output delays, and timing constraints etc.. These information is used by EDA tools during synthesis, placement, and timing analysis to ensure the design meets performance requirements.
 
 **MCMM (Multi-Corner Multi-Mode)**
-Not a file but a set of commands, in `scripts/mcmm.tcl`, that define the conditions under which the design is analysed. A **mode** is what the chip is doing, a **corner** is a combination of process, voltage and temperature, and a **scenario** is a mode analysed at a corner. Defining several lets the tool check that the chip works across every combination of operating condition and manufacturing variation it will meet.
+This is text file that defines the various operating conditions for a chip design, including different modes (functional states) and operating corners (variations in process, voltage, and temperature). This file allows timing analysis tools to check if the chip will perform correctly under all potential operating scenarios, ensuring design stability and timing closure by verifying the chip's performance across different PVT corners and operating modes.
 
 **SDF (Standard Delay Format)**
 A text file giving the delay of every cell and every wire in the design at one corner. It is produced after routing, when the wires exist and their resistance and capacitance can be extracted rather than estimated, and it is read by the simulator so that a gate-level simulation runs at silicon speed instead of at zero delay.

@@ -1,10 +1,10 @@
 ####################################################################
 #
-#  Lab 1 simulation and waveform viewing.
+#  Simulation and waveform viewing for the standard cell flow.
 #
 #  Author:   Sne Samal
-#  Version:  1.0
-#  Date:     2026-08-23
+#  Version:  1.1
+#  Date:     2026-09-05
 #
 #  Synthesis and layout are not run from here. They are run directly
 #  in the tool, one script at a time:
@@ -38,7 +38,7 @@ VCS := vcs -full64 -sverilog -timescale=1ns/1ps -debug_access+all -kdb \
 # The testbench dumps to waveform.vcd in the current directory, so
 # each simulation's output is moved aside and kept under its own tag.
 define run_sim
-	test -n "$$SYN_KIT_TCL" || { echo "Run 'tools/syn tsmc65LP' from the repo root first."; exit 1; }
+	test -n "$$SYN_KIT_TCL" || { echo "No PDK loaded. Load the tools and a PDK first."; exit 1; }
 	mkdir -p $(SIM) $(LOGS)
 	rm -f waveform.vcd
 	$(1) -o $(SIM)/simv_$(2) -Mdir=$(SIM)/csrc_$(2) -l $(LOGS)/vcs_$(2).log
@@ -112,7 +112,7 @@ clean:
 ## help: list the targets
 help:
 	@echo ""
-	@echo "  Lab 1 simulation. Load the tools first:  tools/syn tsmc65LP"
+	@echo "  Simulation targets. Load the tools and a PDK first."
 	@echo ""
 	@grep -E '^## ' $(MAKEFILE_LIST) | sed 's/^## /  make /' | \
 	  awk -F': ' '{ printf "%-24s %s\n", $$1, $$2 }'

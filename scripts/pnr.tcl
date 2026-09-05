@@ -1,11 +1,11 @@
 ####################################################################
 ##
 ##  Place and route a synthesised netlist through to a finished
-##  layout. Reads the netlist from syn_logical.tcl.
+##  layout. Reads the netlist written by syn_logical.tcl.
 ##
 ##  Author:   Sne Samal
-##  Version:  1.0
-##  Date:     2026-08-23
+##  Version:  1.1
+##  Date:     2026-09-05
 ##
 ##      fc_shell -f scripts/pnr.tcl
 ##
@@ -13,8 +13,6 @@
 
 set FLOW logical
 source scripts/setup.tcl
-
-lab_banner "Place and route: $DESIGN"
 
 set_host_options -max_cores $MAX_CORES
 
@@ -26,7 +24,6 @@ if { [file exists $PNR_LIB] } { file delete -force $PNR_LIB }
 
 create_lib $PNR_LIB -technology $TECH_FILE -ref_libs $REF_LIBS
 
-# link_block resolves every instance against the reference libraries.
 read_verilog -top $DESIGN $SYNTH_V
 link_block
 
@@ -50,18 +47,16 @@ source scripts/floorplan.tcl
 ####################################################################
 ## Placement
 ####################################################################
-# place_opt places, then optimises now that it knows where things are.
 # PLACE-006 over utilization means the core is too small: lower
-# CORE_UTIL.
-
-lab_banner "Placement"
+# CORE_UTIL in scripts/setup.tcl.
 
 redirect -tee -file $RPT_DIR/place_pre_check.rpt \
     "check_design -checks pre_placement_stage -log_file $RPT_DIR/place_check.log"
 
 place_opt
 
-# Constants need a tie cell rather than a direct connection to a rail.
+# Constants need a tie cell rather than a direct connection to a rail,
+# and anything that inserts cells has to reconnect power afterwards.
 add_tie_cells \
     -tie_high_lib_cells [get_lib_cells */$TIE_HI_CELL] \
     -tie_low_lib_cells  [get_lib_cells */$TIE_LO_CELL]
@@ -75,7 +70,6 @@ redirect -tee -file $RPT_DIR/place_pg_drc.rpt          {check_pg_drc}
 redirect -tee -file $RPT_DIR/place_pg_connectivity.rpt {check_pg_connectivity}
 
 lab_reports place
-lab_headline
 save_block -label place
 save_lib
 

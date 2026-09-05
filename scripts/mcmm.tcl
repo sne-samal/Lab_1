@@ -4,14 +4,12 @@
 ##  Sourced once the block exists; the caller sets PHYSICAL first.
 ##
 ##  Author:   Sne Samal
-##  Version:  1.0
-##  Date:     2026-08-23
+##  Version:  1.1
+##  Date:     2026-09-05
 ##
 ####################################################################
 
-if { ![info exists PHYSICAL] } {
-    error "Set PHYSICAL to 1 or 0 before sourcing mcmm.tcl"
-}
+if { ![info exists PHYSICAL] } { error "Set PHYSICAL to 1 or 0 before sourcing mcmm.tcl" }
 
 # The tool's own default mode, corner and scenario have no process
 # label and no parasitics, so a design can appear to pass at a corner
@@ -30,11 +28,7 @@ if { $PHYSICAL } {
     read_parasitic_tech -tlup $TLUPLUS_MIN -name rcbest
 }
 
-array set RC_SPEC {
-    wc rcworst
-    tc rctyp
-    bc rcbest
-}
+array set RC_SPEC { wc rcworst  tc rctyp  bc rcbest }
 
 ####################################################################
 ## Mode and corners
@@ -66,8 +60,6 @@ foreach corner $CORNER_LABELS {
 ####################################################################
 ## Constraints
 ####################################################################
-# The same SDC into every scenario: they differ by corner, not by what
-# the design is asked to do.
 
 foreach corner $CORNER_LABELS {
     current_scenario func_$corner
@@ -77,10 +69,8 @@ foreach corner $CORNER_LABELS {
     set_driving_cell -lib_cell $DRIVE_CELL \
         [get_ports * -filter "direction == in && name != $CLK_PORT"]
 
-    # On-chip variation. A corner fixes one process, voltage and
-    # temperature for the whole die; these allow paths to differ from
-    # each other within it. Without them every cell on the die is
-    # assumed identical, which no die is.
+    # A corner fixes one PVT for the whole die. Derating lets paths
+    # differ from each other within it.
     set_timing_derate -early $DERATE_EARLY -cell_delay -net_delay
     set_timing_derate -late  $DERATE_LATE  -cell_delay -net_delay
 }
@@ -98,9 +88,6 @@ foreach corner $CORNER_LABELS {
 ####################################################################
 ## What each scenario is for
 ####################################################################
-#   wc  slow, hot, low voltage    setup, transition, capacitance
-#   bc  fast, cold, high voltage  hold
-#   tc  nominal                   power
 
 set_scenario_status func_wc -active true \
     -setup true  -hold false \
@@ -118,14 +105,3 @@ set_scenario_status func_tc -active true \
     -leakage_power true   -dynamic_power true
 
 current_scenario func_wc
-
-puts ""
-puts "MCMM: mode func, corners $CORNER_LABELS"
-puts "  func_wc  setup, max_tran, max_cap, leakage"
-puts "  func_bc  hold"
-puts "  func_tc  power"
-if { $PHYSICAL } {
-    puts "  parasitics: wc=rcworst tc=rctyp bc=rcbest"
-} else {
-    puts "  non-physical mode, zero interconnect delay"
-}

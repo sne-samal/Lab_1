@@ -1,21 +1,16 @@
 ####################################################################
 ##
-##  Kit, design parameters, directories and reporting helpers.
+##  Kit, design parameters, directories and the reporting helper.
 ##  Sourced first by every flow script, which sets FLOW beforehand.
 ##
 ##  Author:   Sne Samal
-##  Version:  1.0
-##  Date:     2026-08-23
+##  Version:  1.1
+##  Date:     2026-09-05
 ##
 ####################################################################
 
-if { ![info exists FLOW] } {
-    error "Set FLOW to logical or fusion before sourcing setup.tcl"
-}
-
-if { ![info exists env(SYN_KIT_TCL)] } {
-    error "SYN_KIT_TCL is not set. Run 'tools/syn tsmc65LP' from the repo root first."
-}
+if { ![info exists FLOW] } { error "Set FLOW to logical or fusion before sourcing setup.tcl" }
+if { ![info exists env(SYN_KIT_TCL)] } { error "SYN_KIT_TCL is not set. Load the PDK first." }
 
 source $env(SYN_KIT_TCL)
 
@@ -32,7 +27,7 @@ foreach v {
     PWR_NET GND_NET
 } {
     if { ![info exists $v] && ![array exists $v] } {
-        error "Kit $env(SYN_KIT_TCL) does not define $v. Copy tools/ across again."
+        error "Kit $env(SYN_KIT_TCL) does not define $v."
     }
 }
 
@@ -51,15 +46,15 @@ set SDC_FILE  constraints/$DESIGN.sdc
 ####################################################################
 # The clock is not here. It lives in the SDC file.
 
-set CORE_UTIL   0.6         ;# fraction of the core available to cells
-set ASPECT      1.0         ;# core height / width
-set CORE_OFFSET 5           ;# core to die edge, um
+set CORE_UTIL   0.6         ;# fraction of the core area filled by cells
+set ASPECT      1.0         ;# core height / core width
+set CORE_OFFSET 5           ;# core edge to die edge (microns)
 
-set RING_WIDTH   1.0        ;# power ring, um
-set RING_SPACING 0.5
-# Centres the ring set in the core-to-die channel:
-# (CORE_OFFSET - (2 * RING_WIDTH + RING_SPACING)) / 2.
-set RING_OFFSET  1.25
+set RING_WIDTH   1.0        ;# width of one power ring conductor (microns)
+set RING_SPACING 0.5        ;# gap between the VDD and VSS rings (microns)
+
+# Centres the pair of rings in the core-to-die channel.
+set RING_OFFSET [expr {($CORE_OFFSET - (2 * $RING_WIDTH + $RING_SPACING)) / 2.0}]
 
 # On-chip variation, applied at every corner in scripts/mcmm.tcl.
 set DERATE_EARLY 0.95
@@ -92,20 +87,12 @@ set SYNTH_SDC $OUT_DIR/${DESIGN}_synth.sdc
 set LAYOUT_V  $OUT_DIR/${DESIGN}_layout.v
 
 ####################################################################
-## Helpers
+## Reports
 ####################################################################
-# Prefixed lab_ because the tool refuses to create a procedure whose
-# name collides with one of its own commands.
-
-proc lab_banner {text} {
-    puts ""
-    puts "=================================================================="
-    puts "  $text"
-    puts "=================================================================="
-}
-
 # One call per stage, so a stage's effect is a diff against the one
-# before it.
+# before it. Prefixed lab_ because the tool refuses to create a
+# procedure whose name collides with one of its own commands.
+
 proc lab_reports {stage {physical 1}} {
     global RPT_DIR POWER_SCENARIO
 
@@ -114,36 +101,12 @@ proc lab_reports {stage {physical 1}} {
     redirect -file $RPT_DIR/${stage}_timing_min.rpt \
         {report_timing -delay_type min -max_paths 10}
     redirect -file $RPT_DIR/${stage}_area.rpt  {report_area}
+    redirect -file $RPT_DIR/${stage}_cells.rpt {report_cells}
     redirect -file $RPT_DIR/${stage}_qor.rpt   {report_qor}
-    redirect -file $RPT_DIR/${stage}_power.rpt \
-        "report_power -scenarios $POWER_SCENARIO"
+    redirect -file $RPT_DIR/${stage}_power.rpt {report_power -scenarios $POWER_SCENARIO}
 
     if { $physical } {
         catch {redirect -file $RPT_DIR/${stage}_utilization.rpt {report_utilization}}
         catch {redirect -file $RPT_DIR/${stage}_congestion.rpt  {report_congestion}}
     }
-
-    puts "Reports written to $RPT_DIR/${stage}_*.rpt"
-}
-
-proc lab_headline {} {
-    global DESIGN
-
-    set area  "n/a"
-    set slack "n/a"
-    set cells "n/a"
-
-    catch { set area [get_attribute [get_designs $DESIGN] cell_area] }
-    catch {
-        set path [get_timing_paths -delay_type max -max_paths 1]
-        if { [sizeof_collection $path] > 0 } {
-            set slack [get_attribute $path slack]
-        }
-    }
-    catch { set cells [sizeof_collection [get_cells -quiet -hierarchical]] }
-
-    puts ""
-    puts "  cell area        : $area um2"
-    puts "  worst setup slack: $slack ns"
-    puts "  leaf cells       : $cells"
 }

@@ -4,8 +4,8 @@
 ##  Units are nanoseconds and picofarads.
 ##
 ##  Author:   Sne Samal
-##  Version:  1.0
-##  Date:     2026-08-23
+##  Version:  1.1
+##  Date:     2026-09-05
 ##
 ####################################################################
 
@@ -15,10 +15,13 @@ create_clock -name clk -period 1.0 [get_ports clk]
 # Jitter, and the skew the clock tree will have.
 set_clock_uncertainty 0.02 [get_clocks clk]
 
-# Edge rate assumed until the clock tree is built.
+# The clock edge rate to assume while the clock is still ideal.
+# Superseded by the real edge rates once clock_opt has built the tree.
 set_clock_transition 0.05 [get_clocks clk]
 
-# Without this, max_transition checking has no value to check against.
+# The slowest edge any net in the design is allowed. This is the limit
+# that makes the tool buffer long nets and upsize weak drivers, and
+# without it max transition checking has nothing to check against.
 set_max_transition 0.2 [current_design]
 
 # 20 percent of the period budgeted at each boundary.
